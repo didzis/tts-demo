@@ -1,46 +1,89 @@
 <!doctype html5>
 <html>
 <head>
-  <title>TTS Server Demo</title>
+  <title>Text-To-Speech Demo</title>
   <style>
   </style>
 </head>
 <body>
   <div>
-    <div>
-      Model:
-      <select id="model-selector">
+    <h2>
+      Text-To-Speech Demo &nbsp;
+      <span style="font-size: 14px; font-weight: normal">
+        (Engine: <a href="https://github.com/coqui-ai/TTS.git" target="_blank">GitHub</a>)
+      </span>
+    </h2>
+    <div class="param">
+      <strong>Model:</strong>
+      <select id="model">
       </select>
     </div>
-    <div>
-      Language:
+    <div class="param">
+      <strong>Language:</strong>
       <select id="language">
       </select>
     </div>
-    <div>
-      Speaker:
+    <div class="param">
+      <strong>Speaker:</strong>
       <select id="speaker">
+        <optgroup label="Model Speakers" id="model-speakers">
+        </optgroup>
+        <optgroup label="External Speakers" id="external-speakers">
+        </optgroup>
       </select>
       |
-      <button id="select-speaker">Choose Speaker File</button>
+      <button id="select-speaker">Choose Speaker Wave File</button>
       <input type="file" id="speaker-file-selector" style="display: none">
     </div>
-    <div>
-      Text:
+    <div class="param">
+      <strong>Text:</strong>
       <br/>
-      <textarea id="text"></textarea>
+      <textarea id="text" placeholder="Enter text, Shift-Enter to synthesize"></textarea>
     </div>
     <br/>
-    <button id="generate">Synthesize</button>
-    <div id="result">
+    <button id="generate">Synthesize Audio</button>
+    &nbsp;
+    &nbsp;
+    &nbsp;
+    <div>
+      <div id="loader" class="loader" style="display: none">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div id="error" class="error" style="display: none"></div>
+    </div>
+    <h3 id="results-title" style="display: none">Results: <span id="clear"><button id="clear" style="font-size: 10px">Clear</button></span></h3>
+    <div id="results"></div>
     <br/>
     </div>
   </div>
   <script>
+    let loader, errorMessage;
+
+    function showLoading() {
+      loader.style.display = 'inline-block';
+      errorMessage.style.display = 'none';
+    }
+
+    function hideLoading() {
+      loader.style.display = 'none';
+    }
+
+    function hideError() {
+      errorMessage.style.display = 'none';
+    }
+
+    function showError(message) {
+      errorMessage.style.display = 'inline-block';
+      errorMessage.innerText = message;
+      loader.style.display = 'none';
+    }
+
     const baseURL = ``;
     const modelConfig = {};
 
-    let speakerFile;
+    const speakerFiles = {};
 
     async function loadModelInfo() {
       let modelLanguages, modelSpeakers;
@@ -95,11 +138,17 @@
 
       console.log('speaker file:', speakerFile);
 
-      populateSpeakers(speakerFile.name);
+      addExternalSpeaker(speakerFile);
+    }
+
+    async function clear() {
+        const result = document.querySelector(`div#results`);
+        result.innerHTML = '';
+        document.querySelector(`#results-title`).style.display = 'none';
     }
 
     async function generate() {
-      const modelName = document.querySelector(`select#model-selector`).value;
+      const modelName = document.querySelector(`select#model`).value;
       const text = document.querySelector(`textarea#text`).value;
       const language = document.querySelector(`select#language`).value;
       const speaker = document.querySelector(`select#speaker`).value;
@@ -111,95 +160,137 @@
       // formData.append('model_name', 'tts_models/multilingual/multi-dataset/your_tts');
       formData.append('text', text);
       formData.append('language', language);
-      if(speakerFile && speaker == '-') {
-        formData.append('speaker_wav', speakerFile);
+      if(speaker.startsWith('--')) {
+        formData.append('speaker_wav', speakerFiles[speaker]);
       } else {
         formData.append('speaker', speaker);
       }
       // formData.append('download', 'on');
       const body = formData;
       try {
+        showLoading();
+
         const response = await fetch(`/models/${modelName}/generate`, { method: 'POST', body, headers });
         if(!response.ok) {
-          // spinner.style.display = 'none';
+          console.log(response);
+          // const data = await response.json();
+          // data.detail
+          showError(`Response ${response.status}: ${response.statusText}`);
+          hideLoading();
           return;
         }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
 
 
-        const result = document.querySelector(`div#result`);
-        result.innerHTML = '';
+        const result = document.querySelector(`div#results`);
+        // result.innerHTML = '';
+
+        const container = document.createElement('div');
+
+        container.classList.add('result');
+
+        const infoContainer = document.createElement('div');
+
+        const now = new Date();
+        const nowstring = now.toISOString();
+        const datetime = nowstring.replace('T', ' ').replace('Z', ' UTC');
+        const speakerName = speaker.startsWith('--') ? speakerFiles[speaker].name : speaker || 'none';
+
+        const info = { 'Date-Time': datetime, Model: modelName, Language: language, Speaker: speakerName, Text: text };
+        for(const [title, value] of Object.entries(info)) {
+          const div = document.createElement('div');
+
+          const titleSpan = document.createElement('span');
+          titleSpan.classList.add('info-title');
+          titleSpan.innerText = `${title}: `;
+          div.appendChild(titleSpan);
+
+          const valueSpan = document.createElement('span');
+          valueSpan.classList.add('info-value');
+          valueSpan.innerText = value;
+          div.appendChild(valueSpan);
+
+          infoContainer.appendChild(div);
+        }
+
+        container.appendChild(infoContainer);
+
+        closeButton = document.createElement('div');
+        closeButton.classList.add('close');
+        closeButton.innerText = '✗';
+        // closeButton.innerHTML = '&Cross;';
+        closeButton.title = 'Close Result';
+        closeButton.addEventListener('click', e => {
+          e.target.parentNode.remove();
+          if(document.querySelector(`div#results`).children.length == 0) {
+            document.querySelector(`#results-title`).style.display = 'none';
+          }
+        });
+        container.appendChild(closeButton);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.innerText = 'Download Wave';
+        link.target = '_blank';
+        link.download = `output-${nowstring.replaceAll('-', '').replace('T', '-').replaceAll(':', '').substr(0,15)}.wav`;
+        container.appendChild(link);
+
+
+        const videoDiv = document.createElement('div');
+        videoDiv.classList.add('video');
 
         const video = document.createElement('video');
         video.src = url;
         video.controls = true;
-        // const video = appMT.$el.querySelector('video');
-        // const source = document.createElement('source')
-        // source.type = 'audio/wave';
-        // source.src = url;
-        // console.log(source)
-        // video.appendChild(source);
-        result.appendChild(video);
 
-        const link = document.createElement('a');
-        link.href = url;
-        link.innerText = 'Download';
-        link.target = '_blank';
-        link.download = 'output.wav';
-        result.appendChild(link);
+        videoDiv.appendChild(video);
+        container.appendChild(videoDiv);
+
+        document.querySelector(`#results-title`).style.display = 'block';
+
+        // result.appendChild(container);
+        result.insertBefore(container, result.firstChild);
+
+        hideLoading();
 
       } catch(e) {
         console.error('TTS failed:', e);
-        // spinner.style.display = 'none';
+        showError(`${e.name}: ${e.message}`);
+        hideLoading();
         return;
       }
     }
 
     function populateModelSelector() {
-      const select = document.querySelector(`select#model-selector`);
+      const select = document.querySelector(`select#model`);
       for(const [name, config] of Object.entries(modelConfig)) {
         option = document.createElement('option');
         option.value = name;
-        option.innerText = name.split('--', 3).join('/');
+        const p = name.split('--');
+        option.innerText = [p[0], p[1], p.slice(2).join('--')].join('/') + (config.languages && config.languages.length > 1 ? ` [${config.languages.join(', ')}]` : '');
         select.appendChild(option);
       }
       modelChanged();
     }
 
-    function populateSpeakers(fileName) {
-      const modelName = document.querySelector(`select#model-selector`).value;
+    function addExternalSpeaker(file) {
       const speakerSelect = document.querySelector(`select#speaker`);
-      speakerSelect.innerHTML = '';
-      const config = modelConfig[modelName];
-      for(const speaker of config.speakers) {
-        option = document.createElement('option');
-        option.value = speaker;
-        option.innerText = speaker;
-        speakerSelect.appendChild(option);
-      }
-      if(!config.speakers || config.speakers.length === 0) {
-        option = document.createElement('option');
-        option.value = '';
-        option.innerText = 'default';
-        speakerSelect.appendChild(option);
-      }
-      if(fileName && fileName.length > 0) {
-        option = document.createElement('option');
-        option.value = '-';
-        option.innerText = fileName;
-        speakerSelect.appendChild(option);
-        speakerSelect.value = '-';
-      }
+      const externalSpeakers = document.querySelector(`select#speaker > optgroup#external-speakers`);
+      option = document.createElement('option');
+      option.value = '--' + Object.keys(speakerFiles).length;
+      option.innerText = file.name;
+      speakerFiles[option.value] = file;
+      externalSpeakers.appendChild(option);
+      speakerSelect.value = option.value;
     }
 
     function modelChanged() {
-      const modelName = document.querySelector(`select#model-selector`).value;
-      const languageSelect = document.querySelector(`select#language`);
-      const speakerSelect = document.querySelector(`select#speaker`);
-      languageSelect.innerHTML = '';
-      speakerSelect.innerHTML = '';
+      const modelName = document.querySelector(`select#model`).value;
       const config = modelConfig[modelName];
+      // languages
+      const languageSelect = document.querySelector(`select#language`);
+      languageSelect.innerHTML = '';
       console.log('model changed', modelName, 'config', config);
       for(const language of config.languages) {
         option = document.createElement('option');
@@ -207,29 +298,202 @@
         option.innerText = language;
         languageSelect.appendChild(option);
       }
+      // speakers
+      const modelSpeakers = document.querySelector(`select#speaker > optgroup#model-speakers`);
+      modelSpeakers.innerHTML = '';
       for(const speaker of config.speakers) {
         option = document.createElement('option');
         option.value = speaker;
         option.innerText = speaker;
-        speakerSelect.appendChild(option);
+        modelSpeakers.appendChild(option);
       }
       if(!config.speakers || config.speakers.length === 0) {
         option = document.createElement('option');
         option.value = '';
         option.innerText = 'default';
-        speakerSelect.appendChild(option);
+        modelSpeakers.appendChild(option);
       }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
+
       await loadModelInfo();
 
-      document.querySelector('select#model-selector').addEventListener('change', modelChanged);
+      loader = document.querySelector('#loader');
+      errorMessage = document.querySelector('#error');
+
+      document.querySelector('select#model').addEventListener('change', modelChanged);
       document.querySelector('button#generate').addEventListener('click', generate);
+      document.querySelector('button#clear').addEventListener('click', clear);
       document.querySelector('input#speaker-file-selector').addEventListener('change', speakerFileSelected);
       document.querySelector('#select-speaker').addEventListener('click', selectSpeaker);
+
+      const shiftEnterGenerate = e => {
+        if(e.shiftKey && e.keyCode == 13) {
+          e.preventDefault();
+          e.stopPropagation();
+          generate();
+        }
+      };
+
+      document.querySelector('textarea#text').addEventListener('keydown', shiftEnterGenerate);
+      document.querySelector('select#speaker').addEventListener('keydown', shiftEnterGenerate);
+      document.querySelector('select#language').addEventListener('keydown', shiftEnterGenerate);
+      document.querySelector('select#model').addEventListener('keydown', shiftEnterGenerate);
+
       populateModelSelector();
     });
   </script>
+  <style>
+
+    body {
+      font-family: monospace;
+    }
+
+    div#results video {
+      width: 80%;
+      height: 50px;
+    }
+
+    .result {
+      margin-top: 16px;
+      padding-top: 6px;
+      border-top: 1px solid gray;
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .result:hover {
+      background-color: #eee;
+    }
+
+    .result a {
+      margin-bottom: 4px;
+    }
+
+    .result div.video {
+      margin-top: 6px;
+    }
+
+    textarea#text {
+      margin-top: 3px;
+      width: 80%;
+      height: 60px;
+    }
+
+    textarea {
+      padding: 4px;
+    }
+
+    textarea, select, button {
+      border-radius: 6px;
+      border: 1px solid gray;
+    }
+
+    select {
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+
+    button {
+      background: none;
+    }
+
+    button:hover {
+      background-color: #eee;
+    }
+
+    /*
+      https://stackoverflow.com/a/36106724
+      Pro-tip Note: for some reason, CSS syntax needs the :active snippet after the :hover for the same element in order to be effective
+    */
+    button:active {
+      background-color: #ddd;
+    }
+
+    div.close {
+      cursor: pointer;
+      position: relative;
+      top: 10px;
+      right: 10px;
+      position: absolute;
+
+      height: 30px;
+      font-family: system-ui;
+      font-weight: bold;
+      font-size: 24px;
+      padding-left: 4px;
+      width: 26px;
+      color: #aaa;
+    }
+
+    div.close:hover {
+      border-radius: 6px;
+      color: black;
+    }
+
+    .param {
+      margin-top: 4px;
+    }
+
+    .info-title {
+      font-weight: bold;
+      /* font-style: italic; */
+    }
+
+    .info-value {
+    }
+
+    .error {
+      color: red;
+      margin-top: 8px;
+    }
+
+    /*
+    https://freshdesignweb.com/css-loading-progress-bar/
+    http://jsfiddle.net/chriscoyier/77Dj2/4/
+    */
+    .loader {
+        text-align: center;
+        margin: 6px 0px;
+        width: 50%;
+    }
+    .loader span {
+        display: inline-block;
+        vertical-align: middle;
+        width: 10px;
+        height: 10px;
+        /* margin: 50px auto; */
+        margin: 0px auto;
+        background: black;
+        border-radius: 50px;
+        -webkit-animation: loader 0.9s infinite alternate;
+        -moz-animation: loader 0.9s infinite alternate;
+    }
+    .loader span:nth-of-type(2) {
+        -webkit-animation-delay: 0.3s;
+        -moz-animation-delay: 0.3s;
+    }
+    .loader span:nth-of-type(3) {
+        -webkit-animation-delay: 0.6s;
+        -moz-animation-delay: 0.6s;
+    }
+    @keyframes loader {
+      0% {
+        width: 10px;
+        height: 10px;
+        opacity: 0.9;
+        -webkit-transform: translateY(0);
+      }
+      100% {
+        /*width: 24px;
+        height: 24px;*/
+        width: 10px;
+        height: 10px;
+        opacity: 0.1;
+        -webkit-transform: translateY(0 /*-21px*/);
+      }
+    }
+  </style>
 </body>
 </html>
