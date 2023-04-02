@@ -80,7 +80,7 @@ def tts_list_model_languages():
 
         # print(f'model {model_name} languages: {", ".join(languages)}')
 
-        model_languages[model_name] = list(languages)
+        model_languages[model_name] = list(sorted(languages))
 
     return model_languages
 
