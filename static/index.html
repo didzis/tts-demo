@@ -1,0 +1,235 @@
+<!doctype html5>
+<html>
+<head>
+  <title>TTS Server Demo</title>
+  <style>
+  </style>
+</head>
+<body>
+  <div>
+    <div>
+      Model:
+      <select id="model-selector">
+      </select>
+    </div>
+    <div>
+      Language:
+      <select id="language">
+      </select>
+    </div>
+    <div>
+      Speaker:
+      <select id="speaker">
+      </select>
+      |
+      <button id="select-speaker">Choose Speaker File</button>
+      <input type="file" id="speaker-file-selector" style="display: none">
+    </div>
+    <div>
+      Text:
+      <br/>
+      <textarea id="text"></textarea>
+    </div>
+    <br/>
+    <button id="generate">Synthesize</button>
+    <div id="result">
+    <br/>
+    </div>
+  </div>
+  <script>
+    const baseURL = ``;
+    const modelConfig = {};
+
+    let speakerFile;
+
+    async function loadModelInfo() {
+      let modelLanguages, modelSpeakers;
+      {
+        const response = await fetch(`/models/languages`);
+        if(response.ok) {
+          modelLanguages = await response.json();
+        }
+      }
+      {
+        const response = await fetch(`/models/speakers`);
+        if(response.ok) {
+          modelSpeakers = await response.json();
+        }
+      }
+      for(const [name, languages] of Object.entries(modelLanguages)) {
+        if(!modelConfig[name]) {
+          modelConfig[name] = { name };
+        }
+        modelConfig[name].languages = languages;
+      }
+      for(const [name, speakers] of Object.entries(modelSpeakers)) {
+        if(!modelConfig[name]) {
+          modelConfig[name] = { name };
+        }
+        modelConfig[name].speakers = speakers;
+      }
+      // console.log(modelLanguages);
+      // console.log(modelSpeakers);
+      console.log(modelConfig);
+      // sort
+    }
+
+    function selectSpeaker(event) {
+      const fileSelector = document.querySelector('#speaker-file-selector')
+      fileSelector.click();
+    }
+
+    async function speakerFileSelected(event) {
+      speakerFile = event.target.files[0];
+      // const status = document.querySelector('#status')
+      // reset file selector: https://stackoverflow.com/a/35323290
+      event.target.value = ''
+      if(!/safari/i.test(navigator.userAgent)){
+        event.target.type = ''
+        event.target.type = 'file'
+      }
+
+      if(!speakerFile) {
+        return;
+      }
+
+      console.log('speaker file:', speakerFile);
+
+      populateSpeakers(speakerFile.name);
+    }
+
+    async function generate() {
+      const modelName = document.querySelector(`select#model-selector`).value;
+      const text = document.querySelector(`textarea#text`).value;
+      const language = document.querySelector(`select#language`).value;
+      const speaker = document.querySelector(`select#speaker`).value;
+      console.log(modelName, language, speaker);
+      console.log(text);
+
+      const headers = { 'Accept': 'audio/*' };
+      const formData = new FormData();
+      // formData.append('model_name', 'tts_models/multilingual/multi-dataset/your_tts');
+      formData.append('text', text);
+      formData.append('language', language);
+      if(speakerFile && speaker == '-') {
+        formData.append('speaker_wav', speakerFile);
+      } else {
+        formData.append('speaker', speaker);
+      }
+      // formData.append('download', 'on');
+      const body = formData;
+      try {
+        const response = await fetch(`/models/${modelName}/generate`, { method: 'POST', body, headers });
+        if(!response.ok) {
+          // spinner.style.display = 'none';
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+
+
+        const result = document.querySelector(`div#result`);
+        result.innerHTML = '';
+
+        const video = document.createElement('video');
+        video.src = url;
+        video.controls = true;
+        // const video = appMT.$el.querySelector('video');
+        // const source = document.createElement('source')
+        // source.type = 'audio/wave';
+        // source.src = url;
+        // console.log(source)
+        // video.appendChild(source);
+        result.appendChild(video);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.innerText = 'Download';
+        link.target = '_blank';
+        link.download = 'output.wav';
+        result.appendChild(link);
+
+      } catch(e) {
+        console.error('TTS failed:', e);
+        // spinner.style.display = 'none';
+        return;
+      }
+    }
+
+    function populateModelSelector() {
+      const select = document.querySelector(`select#model-selector`);
+      for(const [name, config] of Object.entries(modelConfig)) {
+        option = document.createElement('option');
+        option.value = name;
+        option.innerText = name.split('--', 3).join('/');
+        select.appendChild(option);
+      }
+      modelChanged();
+    }
+
+    function populateSpeakers(fileName) {
+      const modelName = document.querySelector(`select#model-selector`).value;
+      const speakerSelect = document.querySelector(`select#speaker`);
+      speakerSelect.innerHTML = '';
+      const config = modelConfig[modelName];
+      for(const speaker of config.speakers) {
+        option = document.createElement('option');
+        option.value = speaker;
+        option.innerText = speaker;
+        speakerSelect.appendChild(option);
+      }
+      if(!config.speakers || config.speakers.length === 0) {
+        option = document.createElement('option');
+        option.value = '';
+        option.innerText = 'default';
+        speakerSelect.appendChild(option);
+      }
+      if(fileName && fileName.length > 0) {
+        option = document.createElement('option');
+        option.value = '-';
+        option.innerText = fileName;
+        speakerSelect.appendChild(option);
+        speakerSelect.value = '-';
+      }
+    }
+
+    function modelChanged() {
+      const modelName = document.querySelector(`select#model-selector`).value;
+      const languageSelect = document.querySelector(`select#language`);
+      const speakerSelect = document.querySelector(`select#speaker`);
+      languageSelect.innerHTML = '';
+      speakerSelect.innerHTML = '';
+      const config = modelConfig[modelName];
+      console.log('model changed', modelName, 'config', config);
+      for(const language of config.languages) {
+        option = document.createElement('option');
+        option.value = language;
+        option.innerText = language;
+        languageSelect.appendChild(option);
+      }
+      for(const speaker of config.speakers) {
+        option = document.createElement('option');
+        option.value = speaker;
+        option.innerText = speaker;
+        speakerSelect.appendChild(option);
+      }
+      if(!config.speakers || config.speakers.length === 0) {
+        option = document.createElement('option');
+        option.value = '';
+        option.innerText = 'default';
+        speakerSelect.appendChild(option);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadModelInfo();
+
+      document.querySelector('select#model-selector').addEventListener('change', modelChanged);
+      document.querySelector('button#generate').addEventListener('click', generate);
+      document.querySelector('input#speaker-file-selector').addEventListener('change', speakerFileSelected);
+      document.querySelector('#select-speaker').addEventListener('click', selectSpeaker);
+      populateModelSelector();
+    });
+  </script>
+</body>
+</html>

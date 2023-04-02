@@ -26,6 +26,7 @@ import traceback
 from fastapi import FastAPI, File, UploadFile, Form, Response, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from TTS.api import TTS
 
@@ -225,13 +226,17 @@ def generate_get(model_name: ModelName,
     return generate(model_name, text, language, speaker, None, download)
 
 
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
+
+enable_cors()
 
 if __name__ == '__main__':
 
     import uvicorn
 
-    if args.cors or True:
+    # if args.cors or True:
+    if True:
         enable_cors()
 
     uvicorn.run("server:app", host=args.host, port=args.port, log_level='info', reload=args.reload)

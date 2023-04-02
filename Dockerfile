@@ -14,6 +14,7 @@ WORKDIR /opt/app
 
 COPY tts_wrapper.py /opt/app/
 COPY server.py /opt/app/
+COPY static/index.html /opt/app/static/
 
 EXPOSE 8000
 
