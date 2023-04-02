@@ -17,6 +17,17 @@ model_sep = '--'
 # default_model_type = 'tts_models'
 default_model_type = None
 
+def reset_models():
+    global model_languages
+    global model_speakers
+    global models_by_language
+    global default_model_type
+
+    model_languages = {}
+    model_speakers = {}
+    models_by_language = defaultdict(list)
+    default_model_type = None
+
 def tts_model_components(model_name):
     model_type = default_model_type
     lang, dataset, model = model_name.split(model_sep, 2)
@@ -229,6 +240,69 @@ class TTSWrapper:
                              self.tts.synthesizer.tts_config.audio.sample_rate, text, language or self.lang, speaker)
         return TTSResult(self.tts.tts(text=text, language=language, speaker=speaker, speaker_wav=speaker_wav),
                          self.tts.synthesizer.tts_config.audio.sample_rate, text, language or self.lang, speaker)
+
+
+import sys, os
+import subprocess
+import asyncio
+
+
+async def tts_async_download(model_name, refresh=None):
+    print(f'Downloading model {model_name}')
+    try:
+        proc = await asyncio.create_subprocess_exec(*[sys.executable, os.path.join(os.path.dirname(__file__), 'tts_download_models.py'), '--name', model_name],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=dict(os.environ, PYTHONUNBUFFERED='1'), bufsize=0)
+        while proc.returncode == None:
+            yield await proc.stdout.read(10)
+    except Exception as e:
+        print('got exception:', e)
+    print(f'Downloading model {model_name} finished.')
+    reset_models()
+    if refresh:
+        refresh()
+
+
+def tts_download(model_name, refresh=None):
+    print(f'Downloading model {model_name}')
+    with subprocess.Popen([sys.executable, os.path.join(os.path.dirname(__file__), 'tts_download_models.py'), '--name', model_name],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=dict(os.environ, PYTHONUNBUFFERED='1'), bufsize=0) as proc:
+        while proc.poll() == None:
+            yield proc.stdout.read(10)
+    print(f'Downloading model {model_name} finished.')
+    reset_models()
+    if refresh:
+        refresh()
+
+
+
+    # import pty
+    # try:
+    #     tts = TTS()
+    #     tts.download_model_by_name(model_name)
+    # except:
+    #     pass
+    # print('exiting')
+    # return
+    # import time
+    # pid, fd = pty.fork()
+    # if pid == 0:
+    #     time.sleep(2)
+    #     try:
+    #         tts = TTS()
+    #         tts.download_model_by_name(model_name)
+    #     except Exception as e:
+    #         print('got exception:', e)
+    #         pass
+    #     # print('about to exit', flush=True)
+    #     os._exit(0)
+    # time.sleep(1)
+    # while True:
+    #     data = os.read(fd, 1024)
+    #     print('got data:', data)
+    #     if not data:
+    #         return
+    #     yield data
+
 
 # if __name__ == '__main__':
 #     print(tts_list_model_speakers())
