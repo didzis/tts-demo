@@ -1,14 +1,21 @@
-FROM ubuntu
+FROM ubuntu:20.04
 
 RUN apt update && apt install -y python3 python3-pip
 
-RUN pip install TTS
+RUN pip install -U pip
+
+RUN pip install TTS==0.13.3
 
 COPY tts_download_models.py /opt/app/
 
+# download all models
 RUN python3 /opt/app/tts_download_models.py --all
 
-RUN pip install fastapi python-multipart uvicorn[standard]
+COPY requirements.txt /opt/app/
+RUN pip install -r /opt/app/requirements.txt
+# RUN pip install fastapi python-multipart uvicorn[standard]
+
+RUN apt install -y espeak
 
 WORKDIR /opt/app
 
