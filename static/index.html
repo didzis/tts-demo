@@ -17,6 +17,11 @@
       <strong>Model:</strong>
       <select id="model">
       </select>
+      <div style="display: inline-block; width: 100px"></div>
+      <strong>All Models:</strong>
+      <select id="model-to-download">
+      </select>
+      <a class="hidden" id="download-model" href="#" target="_blank">Download</a>
     </div>
     <div class="param">
       <strong>Language:</strong>
@@ -85,6 +90,8 @@
 
     const speakerFiles = {};
 
+    let allModels = [];
+
     async function loadModelInfo() {
       let modelLanguages, modelSpeakers;
       {
@@ -115,6 +122,13 @@
       // console.log(modelSpeakers);
       console.log(modelConfig);
       // sort
+    }
+
+    async function loadAllModelsList() {
+      const response = await fetch(`/models/all`);
+      if(response.ok) {
+        allModels = await response.json();
+      }
     }
 
     function selectSpeaker(event) {
@@ -274,6 +288,17 @@
       modelChanged();
     }
 
+    function populateDownloadModelSelector() {
+      const select = document.querySelector(`select#model-to-download`);
+      for(const model of allModels) {
+        option = document.createElement('option');
+        option.value = model;
+        const p = model.split('--');
+        option.innerText = [p[0], p[1], p.slice(2).join('--')].join('/');
+        select.appendChild(option);
+      }
+    }
+
     function addExternalSpeaker(file) {
       const speakerSelect = document.querySelector(`select#speaker`);
       const externalSpeakers = document.querySelector(`select#speaker > optgroup#external-speakers`);
@@ -283,6 +308,13 @@
       speakerFiles[option.value] = file;
       externalSpeakers.appendChild(option);
       speakerSelect.value = option.value;
+    }
+
+    function downloadModelChanged() {
+      const modelName = document.querySelector(`select#model-to-download`).value;
+      const a = document.querySelector(`a#download-model`);
+      a.href = `/models/${modelName}/download`;
+      a.classList.remove('hidden');
     }
 
     function modelChanged() {
@@ -318,11 +350,13 @@
     document.addEventListener('DOMContentLoaded', async () => {
 
       await loadModelInfo();
+      await loadAllModelsList();
 
       loader = document.querySelector('#loader');
       errorMessage = document.querySelector('#error');
 
       document.querySelector('select#model').addEventListener('change', modelChanged);
+      document.querySelector('select#model-to-download').addEventListener('change', downloadModelChanged);
       document.querySelector('button#generate').addEventListener('click', generate);
       document.querySelector('button#clear').addEventListener('click', clear);
       document.querySelector('input#speaker-file-selector').addEventListener('change', speakerFileSelected);
@@ -342,6 +376,7 @@
       document.querySelector('select#model').addEventListener('keydown', shiftEnterGenerate);
 
       populateModelSelector();
+      populateDownloadModelSelector();
     });
   </script>
   <style>
@@ -477,6 +512,9 @@
     .loader span:nth-of-type(3) {
         -webkit-animation-delay: 0.6s;
         -moz-animation-delay: 0.6s;
+    }
+    .hidden {
+      display: none;
     }
     @keyframes loader {
       0% {

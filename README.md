@@ -23,7 +23,8 @@ or [http://localhost:8000/docs](http://localhost:8000/docs) for OpenAPI.
 
 ## Models
 
-The demo interface lists only downloaded models. To download a model, the API `/models/{model_name}/download` can be used,
+The demo interface lists only downloaded models. To download a model either select model to download in all models list and click download
+or use the API `/models/{model_name}/download`,
 where `{model_name}` must be one returned from [/models/all](http://localhost:8000/models/all).
 
 List all models using `curl`:
